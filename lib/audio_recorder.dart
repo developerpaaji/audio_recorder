@@ -13,45 +13,35 @@ class AudioRecorder {
 
   static Future start(
       {String path, AudioOutputFormat audioOutputFormat}) async {
-    String extension;
-    if (path != null) {
-      if (audioOutputFormat != null) {
-        if (_convertStringInAudioOutputFormat(p.extension(path)) !=
-            audioOutputFormat) {
-          extension = _convertAudioOutputFormatInString(audioOutputFormat);
-          path += extension;
-        } else {
-          extension = p.extension(path);
-        }
-      } else {
-        if (_isAudioOutputFormat(p.extension(path))) {
-          extension = p.extension(path);
-        } else {
-          extension = ".m4a"; // default value
-          path += extension;
-        }
-      }
-      File file = fs.file(path);
-      if (await file.exists()) {
-        throw new Exception("A file already exists at the path :" + path);
-      } else if (!await file.parent.exists()) {
-        throw new Exception("The specified parent directory does not exist");
-      }
-    } else {
-      extension = ".m4a"; // default value
+    String extension="amr";
+    File file = fs.file(path);
+    if (await file.exists()) {
+      throw new Exception("A file already exists at the path :" + path);
+    } else if (!await file.parent.exists()) {
+      throw new Exception("The specified parent directory does not exist");
     }
     return _channel
         .invokeMethod('start', {"path": path, "extension": extension});
   }
 
+  static Future<bool> pause()async{
+    bool result=await await _channel.invokeMethod('pause');
+    return result;
+  }
+
+  static Future<bool> resume()async{
+    bool result=await await _channel.invokeMethod('resume');
+    return result;
+  }
+
   static Future<Recording> stop() async {
     Map<String, Object> response =
-        Map.from(await _channel.invokeMethod('stop'));
+    Map.from(await _channel.invokeMethod('stop'));
     Recording recording = new Recording(
         duration: new Duration(milliseconds: response['duration']),
         path: response['path'],
         audioOutputFormat:
-            _convertStringInAudioOutputFormat(response['audioOutputFormat']),
+        _convertStringInAudioOutputFormat(response['audioOutputFormat']),
         extension: response['audioOutputFormat']);
     return recording;
   }

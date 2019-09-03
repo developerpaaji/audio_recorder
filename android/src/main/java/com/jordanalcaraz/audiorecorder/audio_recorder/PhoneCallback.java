@@ -1,4 +1,4 @@
-package android.src.main.java.com.jordanalcaraz.audiorecorder.audio_recorder;
+package com.jordanalcaraz.audiorecorder.audiorecorder;
 
 import android.telephony.CellInfo;
 import android.telephony.CellLocation;

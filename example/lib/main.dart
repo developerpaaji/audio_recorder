@@ -1,9 +1,10 @@
 import 'dart:io' as io;
+import 'dart:io';
 import 'dart:math';
 
 import 'package:audio_recorder/audio_recorder.dart';
-import 'package:file/file.dart';
-import 'package:file/local.dart';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -22,102 +23,201 @@ class _MyAppState extends State<MyApp> {
         appBar: new AppBar(
           title: new Text('Plugin audio recorder'),
         ),
-        body: new AppBody(),
+        body: RecorderScreen(noOfParticipants: 1),
       ),
     );
   }
 }
 
-class AppBody extends StatefulWidget {
-  final LocalFileSystem localFileSystem;
+class RecorderScreen extends StatefulWidget {
+  final int noOfParticipants;
 
-  AppBody({localFileSystem})
-      : this.localFileSystem = localFileSystem ?? LocalFileSystem();
-
+  const RecorderScreen({Key key,@required this.noOfParticipants}) : super(key: key);
   @override
-  State<StatefulWidget> createState() => new AppBodyState();
+  State<StatefulWidget> createState() => _RecorderScreenState();
 }
 
-class AppBodyState extends State<AppBody> {
-  Recording _recording = new Recording();
-  bool _isRecording = false;
-  Random random = new Random();
-  TextEditingController _controller = new TextEditingController();
+class _RecorderScreenState extends State<RecorderScreen>
+    with TickerProviderStateMixin<RecorderScreen> {
+  AnimationController controller;
+  AudioRecorder recorder;
+  String recordingPath;
+  String message = "Initialising";
+  bool isPaused=false;
+  @override
+  void initState() {
+    super.initState();
+    controller = AnimationController(
+      vsync: this,
+      duration: Duration(hours: 1),
+    );
+    startRecording();
+  }
+
+  void showCancelDialog(){
+    showDialog(context: context,builder: (context)=>CupertinoAlertDialog(
+      title: Text("Are you sure?"),
+      content: Text("You will lost all your recording if you exit"),
+      actions: <Widget>[
+        CupertinoActionSheetAction(child: Text("Cancel"),onPressed: (){
+          Navigator.of(context).pop();
+        },),
+        CupertinoActionSheetAction(child: Text("Ok"),onPressed: (){
+          Navigator.of(context).pop();
+          Navigator.of(context).pop();
+        },),
+      ],
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return new Center(
-      child: new Padding(
-        padding: new EdgeInsets.all(8.0),
-        child: new Column(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: <Widget>[
-              new FlatButton(
-                onPressed: _isRecording ? null : _start,
-                child: new Text("Start"),
-                color: Colors.green,
-              ),
-              new FlatButton(
-                onPressed: _isRecording ? _stop : null,
-                child: new Text("Stop"),
-                color: Colors.red,
-              ),
-              new TextField(
-                controller: _controller,
-                decoration: new InputDecoration(
-                  hintText: 'Enter a custom path',
+    return  WillPopScope(
+      onWillPop: ()async{
+        showCancelDialog();
+        return false;
+      },
+      child: CupertinoPageScaffold(
+        navigationBar: CupertinoNavigationBar(
+          backgroundColor: Colors.white,
+          previousPageTitle: "Back",
+          middle: Text("Record"),
+        ),
+        child: Material(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  message,
+                  style: TextStyle(fontSize: 18.0),
                 ),
-              ),
-              new Text("File path of the record: ${_recording.path}"),
-              new Text("Format: ${_recording.audioOutputFormat}"),
-              new Text("Extension : ${_recording.extension}"),
-              new Text(
-                  "Audio recording duration : ${_recording.duration.toString()}")
-            ]),
+                SizedBox(
+                  height: 12.0,
+                ),
+                AnimatedBuilder(
+                  animation: controller,
+                  builder: (context, child) {
+                    Duration duration =
+                    Duration(seconds: (durationSeconds).toInt());
+                    return Text(
+                      "${parseString(duration.inHours)} : ${parseString(duration.inMinutes)} : ${parseString(duration.inSeconds % 60)}",
+                      style:
+                      TextStyle(fontSize: 40.0, fontWeight: FontWeight.w700),
+                    );
+                  },
+                  child: Container(
+                    width: 00.0,
+                    height: 0.0,
+                  ),
+                ),
+                SizedBox(height: 36.0),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    IconButton(icon: Icon(Icons.play_arrow,color: Colors.transparent,), onPressed: null,),
+                    FloatingActionButton(
+                      onPressed: isRecording!=null?() async{
+                        if(isRecording){
+                          await pauseRecording();
+                        }
+                        else{
+                          await resumeRecording();
+                        }
+                      }:null,
+                      child: Icon(!(isRecording??false) ? Icons.play_arrow : Icons.pause),
+                    ),
+                    IconButton(icon: Icon(Icons.stop),onPressed: isRecording!=null?(){
+                      stopRecording();
+                    }:null),
+                  ],
+                )
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  _start() async {
-    try {
-      if (await AudioRecorder.hasPermissions) {
-        if (_controller.text != null && _controller.text != "") {
-          String path = _controller.text;
-          if (!_controller.text.contains('/')) {
-            io.Directory appDocDirectory =
-                await getApplicationDocumentsDirectory();
-            path = appDocDirectory.path + '/' + _controller.text;
-          }
-          print("Start recording: $path");
-          await AudioRecorder.start(
-              path: path, audioOutputFormat: AudioOutputFormat.AAC);
-        } else {
-          await AudioRecorder.start();
-        }
-        bool isRecording = await AudioRecorder.isRecording;
-        setState(() {
-          _recording = new Recording(duration: new Duration(), path: "");
-          _isRecording = isRecording;
-        });
-      } else {
-        Scaffold.of(context).showSnackBar(
-            new SnackBar(content: new Text("You must accept permissions")));
-      }
-    } catch (e) {
-      print(e);
+  bool isRecording ;
+
+  int get  durationSeconds => (controller.value * 60 * 60).toInt();
+
+  String parseString(int number) {
+    if (number < 10) {
+      return "0$number";
+    }
+    return "$number";
+  }
+  Future<bool> checkPermissions()async{
+    return true;
+  }
+  void startRecording() async {
+    String path=await getPath();
+    bool check=await checkPermissions();
+    if(!check){
+      Navigator.of(context).pop();
+    }
+    await AudioRecorder.start(path: path);
+    if (mounted)
+      setState(() {
+        isRecording = true;
+        message = "Recording";
+        controller.forward(from: 0.0);
+      });
+  }
+
+  Future resumeRecording()async{
+    print("Resume");
+
+    await AudioRecorder.resume();
+    controller.forward();
+    if(mounted){
+      setState(() {
+        isRecording=true;
+        message="Recording";
+      });
     }
   }
 
-  _stop() async {
-    var recording = await AudioRecorder.stop();
-    print("Stop recording: ${recording.path}");
-    bool isRecording = await AudioRecorder.isRecording;
-    File file = widget.localFileSystem.file(recording.path);
-    print("  File length: ${await file.length()}");
-    setState(() {
-      _recording = recording;
-      _isRecording = isRecording;
-    });
-    _controller.text = recording.path;
+  Future pauseRecording()async{
+    await AudioRecorder.pause();
+    controller.stop(canceled: false);
+    if(mounted){
+      setState(() {
+        isRecording=false;
+        message="Paused";
+      });
+    }
+  }
+
+  Future stopRecording() async {
+    bool isRecording=await AudioRecorder.isRecording;
+    if (!isRecording) return null;
+    Recording result=await AudioRecorder.stop();
+    print("Path ${result.path}");
+    if (mounted)
+      setState(() {
+        isRecording = false;
+        message = "Stopped";
+        controller.stop(canceled: true);
+      });
+
+  }
+
+  Future<String> getPath() async {
+    Directory extDir = await getExternalStorageDirectory();
+    String extPath = extDir.path;
+    String path = "$extPath/${DateTime.now().toIso8601String()}";
+    return path;
+  }
+
+  @override
+  void dispose() {
+    AudioRecorder.stop();
+    controller.dispose();
+    super.dispose();
   }
 }
