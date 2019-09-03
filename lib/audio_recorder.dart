@@ -14,12 +14,6 @@ class AudioRecorder {
   static Future start(
       {String path, AudioOutputFormat audioOutputFormat}) async {
     String extension="amr";
-    File file = fs.file(path);
-    if (await file.exists()) {
-      throw new Exception("A file already exists at the path :" + path);
-    } else if (!await file.parent.exists()) {
-      throw new Exception("The specified parent directory does not exist");
-    }
     return _channel
         .invokeMethod('start', {"path": path, "extension": extension});
   }
